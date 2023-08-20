@@ -1,5 +1,7 @@
 # AUTORY 2023 AUTONOMOUS CAR CONTROLLING SYSTEM
 
+- arduino based
+
 ## Maintainer
 
 ## File tree
