@@ -1,15 +1,30 @@
 const int MAX_PEDAL_INPUT_1023 = 880;   // 최대 페달 입력값 (0-1023 범위) 설정
-const int MIN_PEDAL_INPUT = 170;   // 최소 페달 입력값 (0-1023 범위) 설정
+const int MIN_PEDAL_INPUT = 190;   // 최소 페달 입력값 (0-1023 범위) 설정
 const int throttle_output_pin = 9;
 const int pedal_input_pin = 0;
 char buf[80];
+bool isForward = true;
 
 void setup() {
   Serial.begin(9600);   // 시리얼 통신을 초기화하고 속도를 9600 bps로 설정
   pinMode(throttle_output_pin, OUTPUT);   // 9번 핀을 출력으로 설정 (모터를 제어하는 출력 핀으로 사용)
+  pinMode(10,OUTPUT);
+  pinMode(3,INPUT);
 }
 
 void loop() {
+// 전후진 toggle
+  if(digitalRead(3) == HIGH){
+    isForward = !isForward;
+  }
+  
+  Serial.println(isForward?"Drive":"Rear");
+  if(isForward){
+    digitalWrite(10,HIGH);
+  }else{
+    digitalWrite(10,LOW);
+  }
+
   if (Serial.available() > 0) {   // 시리얼 버퍼에 데이터가 있는지 확인
     int serialInputVal = Serial.parseInt();   // 시리얼 입력 값을 정수로 읽어옴
 
