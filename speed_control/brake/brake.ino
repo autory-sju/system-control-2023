@@ -11,7 +11,7 @@ int rated_speed = 0;
 
 MAS001 myShield;
 BLC200 myDevice(9600, 100); // Baudrate = 9600, Serial timeout = 100ms
-uint16_t data = 0;
+int data = 0;
 uint16_t pos_input; // uint16_t -> 0 ~ 65535
 
 void setup() {
@@ -29,16 +29,20 @@ void setup() {
   }
 
   myDevice.set_ReductionRatio(DEVICE_ID, GEAR_RATIO);
+
+  delay(5000);
+  Serial.println("Wait done");
+   myDevice.set_PositionWithSpeed(DEVICE_ID, 1,65473, rated_speed * 10);
 }
 
 volatile char tmp;
 String txtt="";
+bool isFirst = true;
 
 void loop() {
 
   //시리얼로 읽어오는 부분
   while(Serial.available() > 0){
-    // Serial.print(Serial.read());
     tmp=Serial.read();
     Serial.print("Serial: ");
     Serial.println(tmp);
@@ -49,29 +53,22 @@ void loop() {
   int spd = 0;
   if (txtt!=""){
     data=txtt.toInt();
-    Serial.print("input data: ");
+    Serial.print("input datatxtt: ");
     Serial.println(data);
     txtt="";
   }
   
   if (data > 0){
     //읽은 숫자가 있다면 그 숫자를 가지고 POS_INPUT 변수 변환
- /* pos_input = data*(65473)/100;
-  Serial.print("pos_input :");
-  Serial.println(pos_input);*/
-   myDevice.set_PositionWithSpeed(DEVICE_ID, 0, data, rated_speed * 10);
-   data =0;
+    //if(data>50) data = 50;
+  data = data*(65473)/100;
+  Serial.print("input data: ");
+  Serial.println(data);
+  myDevice.set_PositionWithSpeed(DEVICE_ID, 0, data, rated_speed * 10);
+  data = 0;
 
   }
-   else if (data <0){
-  /*data = -data;
-  pos_input = data*(65473)/100;
-  Serial.print("pos_input :");
-  Serial.println(pos_input);*/
-   myDevice.set_PositionWithSpeed(DEVICE_ID, 1, -data, rated_speed * 10);
-   data = 0;
 
-  }
 
   delay(10);
 }
