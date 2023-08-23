@@ -11,7 +11,7 @@ int rated_speed = 0;
 
 MAS001 myShield;
 BLC200 myDevice(9600, 100); // Baudrate = 9600, Serial timeout = 100ms
-
+int data = -9990;
 uint16_t pos_input; // uint16_t -> 0 ~ 65535
 
 void setup() {
@@ -43,18 +43,27 @@ void loop() {
     txtt += tmp;
   }
   //시리얼로 읽은 숫자를 data로 저장 
-  int data = -9990;
+  
   int spd = 0;
   if (txtt!=""){
     data=txtt.toInt();
     txtt="";
   }
   
-  if (data!=-9990){
+  if (data >0){
     //읽은 숫자가 있다면 그 숫자를 가지고 POS_INPUT 변수 변환
   pos_input = data*(65473)/100;
   Serial.println(pos_input);
    myDevice.set_PositionWithSpeed(DEVICE_ID, 0, pos_input, rated_speed * 10);
+   data =0;
+
+  }
+   else if (data <0){
+  data = -data;
+  pos_input = data*(65473)/100;
+  Serial.println(pos_input);
+   myDevice.set_PositionWithSpeed(DEVICE_ID, 1, pos_input, rated_speed * 10);
+   data = 0;
 
   }
 
