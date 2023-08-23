@@ -4,6 +4,10 @@ const int throttle_output_pin = 9;
 const int pedal_input_pin = 0;
 char buf[80];
 bool isForward = true;
+int serialInputVal = 0;
+int motorOutputVal = 0;
+int pedalVal1023 = 0;
+int pedalConvertedVal255 = 0;
 
 void setup() {
   Serial.begin(9600);   // 시리얼 통신을 초기화하고 속도를 9600 bps로 설정
@@ -26,7 +30,7 @@ void loop() {
   }
 
   if (Serial.available() > 0) {   // 시리얼 버퍼에 데이터가 있는지 확인
-    int serialInputVal = Serial.parseInt();   // 시리얼 입력 값을 정수로 읽어옴
+    serialInputVal = Serial.parseInt();   // 시리얼 입력 값을 정수로 읽어옴
 
     // 입력 값을 MIN_PEDAL_INPUT MAX_PEDAL_INPUT_1023 범위로 제한
     if (serialInputVal < MIN_PEDAL_INPUT) {
@@ -38,14 +42,14 @@ void loop() {
     Serial.print(serialInputVal);
     Serial.println("/255 -> Input Value");
     // 입력 값을 0-255 범위로 매핑하여 모터 제어
-    int motorOutputVal = map(serialInputVal, MIN_PEDAL_INPUT, MAX_PEDAL_INPUT_1023, 0, 255);
+    motorOutputVal = map(serialInputVal, MIN_PEDAL_INPUT, MAX_PEDAL_INPUT_1023, 0, 255);
     analogWrite(throttle_output_pin, motorOutputVal);
 
 
   } else {
-    int pedalVal1023 = analogRead(pedal_input_pin);   // 아날로그 입력핀으로부터 페달 입력 값을 읽어옴
+    pedalVal1023 = analogRead(pedal_input_pin);   // 아날로그 입력핀으로부터 페달 입력 값을 읽어옴
 
-    int pedalConvertedVal255 = map(pedalVal1023, MIN_PEDAL_INPUT, MAX_PEDAL_INPUT_1023, 0, 255);
+    pedalConvertedVal255 = map(pedalVal1023, MIN_PEDAL_INPUT, MAX_PEDAL_INPUT_1023, 0, 255);
 
     // 만약 변환된 값이 255보다 크면 255로 제한
     if (pedalConvertedVal255 > 255) pedalConvertedVal255 = 255;
