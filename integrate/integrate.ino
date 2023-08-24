@@ -10,6 +10,7 @@ const int dcm_output_pin = 43;
 const int forward_input_pin = 40;
 const int forward_relay_output_pin = 38;
 
+
 // constant
 const int MAX_PEDAL_INPUT_1023 = 880;   // 최대 페달 입력값 (0-1023 범위) 설정
 const int MIN_PEDAL_INPUT = 190;   // 최소 페달 입력값 (0-1023 범위) 설정
