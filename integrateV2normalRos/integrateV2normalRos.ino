@@ -1,7 +1,6 @@
 #include <ros.h>
 #include <std_msgs/Int32.h>
 #include <std_msgs/String.h>
-
 #include "mas001.h"
 #include "blc200.h"
 #include <MsTimer2.h>
@@ -44,7 +43,9 @@ int prevIRState = 0;
 float RPM = 0;
 int estep_read;
 int estep;
-
+float err_P = 0 ,err_I = 0,err_D = 0,err_B = 0;
+int Pv= 2 , Iv= 2; // 반응 속도
+int Dv= 2 ; // 급격한 변화 방지 (오버슈팅 방지)
 
 // Ros
 void messageCb( const std_msgs::Int32& msg){
@@ -62,11 +63,13 @@ BLC200 linearm(9600, 100);
 MAS001 myShield;
 
 void setup() {
+  
+
+  Serial.begin(115200);
+  nh.getHardware()->setBaud(115200);
   nh.initNode();
   nh.subscribe(sub);
   nh.advertise(pub);
-
-  Serial.begin(115200);
   pinMode(auto_pin, INPUT_PULLUP);
   pinMode(dcm_output_pin, OUTPUT);   
   pinMode(forward_input_pin, INPUT_PULLUP);
@@ -101,9 +104,7 @@ void loop() {
   autoSwitch();
   forwardSwitch();
 
-  strcpy(buf, "jello");
-  print(buf);
-
+  //strcpy(buf, "jello");
 
   if(isAuto){
     targetSpeed =(int) Serial.parseInt();
@@ -123,13 +124,6 @@ void loop() {
     manualAcceleration();
   }
   
-}
-
-void print(char* str){
-  str_msg.data = str;
-  pub.publish(&str_msg);
-  nh.spinOnce();
-
 }
 
 
@@ -158,12 +152,32 @@ void autoAcceleration(int accelPressPercent){
   // brake realease
   linearm.set_PositionWithSpeed(LENEAR_DEVICE_ID, 1, 65473, linearSpeed * 10); // go initial position
 
-  accelPressPercent = boxingInt(0, 100, accelPressPercent);
+  //accelPressPercent = boxingInt(0, 100, accelPressPercent);
 
+
+  
+  
+  err_P = speedDis;err_P
+  err_I += err_P;
+  err_D = err_B - err_P;
+  err_B = err_P;
+  accelPressPercent = ((err_P*Pv)+(err_I*Iv)+(err_D*Dv));
+  if (accelPressPercent>=255)accelPressPercent = 255;
+  else if (accelPressPercent<=0) accelPressPercent = 0;
   Serial.print(accelPressPercent);
   Serial.println("% accel AUTO");
-  accelConvertedValue255 += map(accelPressPercent, 0, 100, 0, 255);
-  analogWrite(dcm_output_pin, accelConvertedValue255);
+  
+
+
+
+  //accelConvertedValue255 = map(accelPressPercent, 0, 100, 0, 255);
+  
+  
+  
+    analogWrite(dcm_output_pin, accelPressPercent);
+
+  // analogWrite(dcm_output_pin, accelConvertedValue255);
+
 }
 
 void manualAcceleration(){
@@ -201,7 +215,10 @@ void forwardSwitch(){
 
 // Speed Encoding
 void encoder(){
+  if(prevTime- millis()>20){
   estep++;
+  prevTime = millis();
+  }
 }
 void renewCurrentSpeedInterrupt(){
   estep_read = estep;
@@ -212,6 +229,9 @@ void renewCurrentSpeedInterrupt(){
   Serial.print(currentSpeed);
   Serial.print("km/h / ");
   Serial.println(estep_read);
+  dtostrf(currentSpeed, 4, 2, buf);
+  str_msg.data = buf;
+  pub.publish(&str_msg);
 }
 
 int boxingInt(int min, int max, int value){

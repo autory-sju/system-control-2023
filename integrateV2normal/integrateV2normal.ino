@@ -57,12 +57,12 @@ void setup() {
 
   if(linearm.get_Feedback(LENEAR_DEVICE_ID, 0xA6)){
     linearSpeed = (uint16_t)linearm.blcData[1] << 8 | (uint16_t)linearm.blcData[2];
-  } else{
+  }/* else{
     while(true){
       Serial.println("brake error");
       
     }
-  }
+  }*/
   
   Serial.println("plz wait 5secs");
   linearm.set_ReductionRatio(LENEAR_DEVICE_ID, LINEAR_GEAR_RATIO);
