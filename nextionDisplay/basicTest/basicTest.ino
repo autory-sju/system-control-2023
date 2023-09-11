@@ -1,9 +1,11 @@
 #include <SoftwareSerial.h>
+// #include "mas001.h"
+// #include "blc200.h"
 
+SoftwareSerial HMISerial(31, 30);  // RX, TX
 
-SoftwareSerial HMISerial(2, 3);  // RX, TX
-
-
+// BLC200 linearm(9600, 100);
+// MAS001 myShield;
 
 void setup() {
   Serial.begin(9600);
@@ -65,6 +67,7 @@ void sendString(String sendData, int mode) {
   }
   target.concat(sendData);
   target.concat("\"");
+  Serial.println(sendData);
   for (int i = 0; i < target.length(); i++) {
     HMISerial.write(target[i]);  // 1 문자씩 보냄
   }

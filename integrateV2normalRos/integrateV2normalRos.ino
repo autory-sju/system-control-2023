@@ -14,16 +14,16 @@ const int accel_input_pin = 10;  //A0
 // digital pin
 const int speed_input_pin = 20;
 const int dcm_output_pin = 44;
-const int forward_R_pin = 37;
-const int forward_N_pin = 38;
-const int forward_D_pin = 39;
+const int forward_R_pin = 32;
+// const int forward_N_pin = 38;
+const int forward_D_pin = 33;
 const int forward_relay_output_pin = 50;
-const int auto_ON_pin = 40;
-const int auto_EM_pin = 41;
-const int auto_OFF_pin = 42;
+const int auto_ON_pin = 35;
+const int auto_EM_pin = 34;
+//const int auto_OFF_pin = 42;
 const int foot_pin = 43;
-const int display_rx = 45;
-const int display_tx = 46;
+const int display_rx = 31;
+const int display_tx = 30;
 
 // constant
 const int MAX_PEDAL_INPUT_1023 = 880;  // 최대 페달 입력값 (0-1023 범위) 설정
@@ -55,8 +55,8 @@ float RPM = 0;
 int estep_read;
 int estep;
 float err_P = 0, err_I = 0, err_D = 0, err_B = 0;
-int Pv = 2, Iv = 2;  // 반응 속도
-int Dv = 2;          // 급격한 변화 방지 (오버슈팅 방지)
+float Pv = 0.02, Iv = 0.02;  // 반응 속도
+float Dv = 2;                // 급격한 변화 방지 (오버슈팅 방지)
 
 // Ros
 void messageCb(const std_msgs::Int32& msg);
@@ -84,15 +84,19 @@ void setup() {
 
   pinMode(auto_ON_pin, INPUT_PULLUP);
   pinMode(auto_EM_pin, INPUT_PULLUP);
-  pinMode(auto_OFF_pin, INPUT_PULLUP);
+//  pinMode(auto_OFF_pin, INPUT_PULLUP);
   pinMode(foot_pin, INPUT_PULLUP);
   pinMode(forward_R_pin, INPUT_PULLUP);
-  pinMode(forward_N_pin, INPUT_PULLUP);
+//  pinMode(forward_N_pin, INPUT_PULLUP);
   pinMode(forward_D_pin, INPUT_PULLUP);
 
   pinMode(dcm_output_pin, OUTPUT);
   pinMode(forward_relay_output_pin, OUTPUT);
 
+  HMISerial.begin(9600);
+    while (!Serial) {}  // 시리얼 포트가 연결될 대까지 기다림
+
+  Serial.println("시리얼 포트 연결됨");
 
 
   // attachInterrupt(digitalPinToInterrupt(speed_input_pin), encoder, CHANGE);
@@ -112,8 +116,8 @@ void setup() {
   Serial.println("initialized");
   linearm.set_PositionWithSpeed(LENEAR_DEVICE_ID, 1, 65473, linearSpeed * 10);  // go initial position
 
-  MsTimer2::set(200, renewCurrentSpeedInterrupt);
-  MsTimer2::start();
+  // MsTimer2::set(200, renewCurrentSpeedInterrupt);
+  // MsTimer2::start();
 }
 
 void loop() {
@@ -121,24 +125,28 @@ void loop() {
   autoModeSwitch();
   driveDirectionSwitch();
 
-  if (autoMode == 1) {
-    targetSpeed = (int)Serial.readStringUntil('\n').toInt();
-    sendDisplay(String(targetSpeed), 3);
-    speedDis = targetSpeed - currentSpeed;
-    speedDis = boxingInt(-2, 20, speedDis);
+    sendDisplay(String(millis()), 2);
 
-    if (speedDis >= -2) {
-      autoAcceleration(map(speedDis, -2, 40, 20, 65));
-      //0%(=30)<= speedDis <= 100%(100) MAX65%
-    } else if (-5 > speedDis) {
-      linearControl(50);
-      //0%(=25)<= speedDis <= 100%(50)
-    }
-  } else if (autoMode = 2) {
-    linearControl(100);
-  } else if (autoMode = 3) {
-    manualAcceleration();
-  }
+  // if (autoMode == 1) {
+  //   targetSpeed = (int)Serial.readStringUntil('\n').toInt();
+  //   sendDisplay(String(targetSpeed), 3);
+  //   speedDis = targetSpeed - currentSpeed;
+  //   speedDis = boxingInt(-2, 20, speedDis);
+
+  //   if (speedDis >= -2) {
+  //     autoAcceleration(map(speedDis, -2, 40, 20, 65));
+  //     //0%(=30)<= speedDis <= 100%(100) MAX65%
+  //   } else if (-5 > speedDis) {
+  //     linearControl(50);
+  //     //0%(=25)<= speedDis <= 100%(50)
+  //   }
+  // } else if (autoMode = 2) {
+  //   linearControl(100);
+  // } else if (autoMode = 3) {
+  //   manualAcceleration();
+
+
+  // }
 }
 
 
@@ -194,48 +202,53 @@ void manualAcceleration() {
 
 // MODE SETTING
 void autoModeSwitch() {
+
   //ON40 EM41 OFF42
   int prevMode = autoMode;
-  if (digitalRead(auto_ON_pin) == 1) {
+  if (digitalRead(auto_ON_pin) == 0 && digitalRead(auto_EM_pin) == 1) {
     isAuto = true;
     autoMode = 1;
-  } else if (digitalRead(auto_EM_pin) == 1) {
+  } else if (digitalRead(auto_ON_pin) == 1 && digitalRead(auto_EM_pin) == 0) {
     isAuto = true;
     autoMode = 2;
-  } else if (digitalRead(auto_OFF_pin) == 1) {
+  }// else if (digitalRead(auto_OFF_pin) == 1) {
+  //  isAuto = false;
+  //  autoMode = 3;
+  //}
+   else {
     isAuto = false;
     autoMode = 3;
-  } else {
-    isAuto = false;
-    autoMode = 0;
   }
 
   if (prevMode != autoMode) {
     analogWrite(dcm_output_pin, 0);
-    if(autoMode == 1) sendDisplay("AS-ON", 14);
-    else if(autoMode == 2) sendDisplay("AS-EMER", 14);
-    else if(autoMode == 3) sendDisplay("AS-OFF", 14);
+    if (autoMode == 1) sendDisplay("AS-ON", 14);
+    else if (autoMode == 2) sendDisplay("AS-EMER", 14);
+    else if (autoMode == 3) sendDisplay("AS-OFF", 14);
+    else sendDisplay("AS-OFF", 14);
   }
 }
 void driveDirectionSwitch() {
   int prevMode = directionMode;
 
-  if (digitalRead(forward_R_pin) == 1) {
+  if (digitalRead(forward_R_pin) == 0 &&digitalRead(forward_D_pin) == 1) {
     directionMode = 1;
     digitalWrite(forward_relay_output_pin, HIGH);
-  } else if (digitalRead(forward_N_pin) == 1) {
-    directionMode = 2;
-    digitalWrite(forward_relay_output_pin, LOW);
-  } else if (digitalRead(forward_D_pin) == 1) {
+  }  //else if (digitalRead(forward_N_pin) == 1) {
+     //directionMode = 2;
+     //digitalWrite(forward_relay_output_pin, LOW);
+     //}
+  else if (digitalRead(forward_R_pin) == 1 &&digitalRead(forward_D_pin) == 0) {
     directionMode = 3;
   } else {
-    directionMode = 0;
+    directionMode = 2;
+    digitalWrite(forward_relay_output_pin, LOW);
   }
-    if (prevMode != directionMode) {
+  if (prevMode != directionMode) {
     analogWrite(dcm_output_pin, 0);
-    if(directionMode == 1) sendDisplay("R", 5);
-    else if(directionMode == 2) sendDisplay("N", 5);
-    else if(directionMode == 3) sendDisplay("D", 5);
+    if (directionMode == 1) sendDisplay("R", 5);
+    else if (directionMode == 2) sendDisplay("N", 5);
+    else if (directionMode == 3) sendDisplay("D", 5);
   }
 
   // if (digitalRead(forward_input_pin) == 1) {
@@ -255,14 +268,15 @@ void encoder() {
   }
 }
 void renewCurrentSpeedInterrupt() {
+
   estep_read = estep;
   estep = 0;
   // if(estep_read >= 6) estep_read = 6;
   currentSpeed = PI * WHEEL_DIAMETER * 0.72 * estep_read;  // m/s for every 0.2sec
-  Serial.print("CurrentSpeed/step: ");
-  Serial.print(currentSpeed);
-  Serial.print("km/h / ");
-  Serial.println(estep_read);
+  // Serial.print("CurrentSpeed/step: ");
+  // Serial.print(currentSpeed);
+  // Serial.print("km/h / ");
+  // Serial.println(estep_read);
   dtostrf(currentSpeed, 4, 2, buf);
   str_msg.data = buf;
   pub.publish(&str_msg);
@@ -341,6 +355,8 @@ void sendDisplay(String sendData, int mode) {
   }
   target.concat(sendData);
   target.concat("\"");
+  Serial.print(mode);
+  Serial.println(sendData);
   for (int i = 0; i < target.length(); i++) {
     HMISerial.write(target[i]);  // send each char
   }
