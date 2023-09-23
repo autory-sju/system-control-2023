@@ -15,7 +15,6 @@ const int accel_input_pin = 10;  //A0
 const int speed_input_pin = 20;
 const int dcm_output_pin = 47;
 const int forward_R_switch_pin = 37;
-// const int forward_N_pin = 38;
 const int forward_D_switch_pin = 36;
 const int forward_relay_output_pin = 50;
 const int auto_ON_pin = 53;
@@ -104,46 +103,47 @@ void setup() {
   pinMode(vos_output_pin, OUTPUT);
 
 
-
   HMISerial.begin(9600);
   while (!Serial) {}  // 시리얼 포트가 연결될 대까지 기다림
+  Serial.println("READY");
 
-  Serial.println("시리얼 포트 연결됨");
 
-
-  // attachInterrupt(digitalPinToInterrupt(speed_input_pin), encoder, CHANGE);
   attachInterrupt(digitalPinToInterrupt(speed_input_pin), encoder, RISING);
 
   if (linearm.get_Feedback(LENEAR_DEVICE_ID, 0xA6)) {
     linearSpeed = (uint16_t)linearm.blcData[1] << 8 | (uint16_t)linearm.blcData[2];
   } else {
     while (true) {
-      // Serial.println("brake error");
+      Serial.println("brake error");
+      sendDisplay("LIN CON ERR", 15);
+      delay(1000);
+      if (linearm.get_Feedback(LENEAR_DEVICE_ID, 0xA6)) {
+        linearSpeed = 30000;
+        break;
+      }
     }
   }
 
-  if (linearm.get_Feedback(LENEAR_DEVICE_ID, 0xA6)) {
-    linearSpeed = (uint16_t)linearm.blcData[1] << 8 | (uint16_t)linearm.blcData[2];
-    Serial.println(linearSpeed);
-  } else {
-    Serial.println("Fail..");
-    sendDisplay("LIN CON ERR", 15);
-    while (1);
-  }
+  // if (linearm.get_Feedback(LENEAR_DEVICE_ID, 0xA6)) {
+  //   linearSpeed = (uint16_t)linearm.blcData[1] << 8 | (uint16_t)linearm.blcData[2];
+  //   Serial.println(linearSpeed);
+  // } else {
+  //   Serial.println("Fail..");
+  //   sendDisplay("LIN CON ERR", 15);
+  //   while (1);
+  // }
 
   Serial.println("plz wait 3secs");
   linearm.set_ReductionRatio(LENEAR_DEVICE_ID, LINEAR_GEAR_RATIO);
-  delay(3000);
   Serial.println("initialized");
   // linearm.set_PositionWithSpeed(LENEAR_DEVICE_ID, 1, 65473, linearSpeed * 10);  // go initial position
   linearControl(0);
+  delay(3000);
 
   MsTimer2::set(200, renewCurrentSpeedInterrupt);
   MsTimer2::start();
 }
 
-void initDisplay() {
-}
 
 void loop() {
   nh.spinOnce();
@@ -153,20 +153,20 @@ void loop() {
   brakeSwitch();
   showingDisplay();
 
-  if (autoMode == 1) { //  AS - ON
+  if (autoMode == 1) {  //  AS - ON
     targetSpeed = (int)Serial.readStringUntil('\n').toInt();
     sendDisplay(String(targetSpeed), 3);
     speedDis = targetSpeed - currentSpeed;
     speedDis = boxingInt(-2, 20, speedDis);
 
     if (speedDis >= -2) {
-      autoAcceleration(map(speedDis, -2, 40, 20, 65)); //0%(=30)<= speedDis <= 100%(100) MAX65%
+      autoAcceleration(map(speedDis, -2, 40, 20, 65));  //0%(=30)<= speedDis <= 100%(100) MAX65%
     } else if (-5 > speedDis) {
-      linearControl(50); //0%(=25)<= speedDis <= 100%(50)
+      linearControl(50);  //0%(=25)<= speedDis <= 100%(50)
     }
-  } else if (autoMode = 2) { // AS - EM
+  } else if (autoMode = 2) {  // AS - EM
     linearControl(100);
-  } else if (autoMode = 3) { // AS - OFF
+  } else if (autoMode = 3) {  // AS - OFF
     manualAcceleration();
   }
 }
@@ -194,10 +194,7 @@ void loop() {
 // }
 
 void autoAcceleration(int accelPressPercent) {
-  // // brake realease
-  // linearm.set_PositionWithSpeed(LENEAR_DEVICE_ID, 1, 65473, linearSpeed * 10);  // go initial position
-
-  //accelPressPercent = boxingInt(0, 100, accelPressPercent);
+  accelPressPercent = boxingInt(0, 100, accelPressPercent);
   err_P = speedDis;
   err_I += err_P;
   err_D = err_B - err_P;
@@ -274,7 +271,6 @@ void autoModeSwitch() {
     // else if (autoMode == 3) sendDisplay("MANUAL", 14);
     // else sendDisplay("ERR", 14);
   }
-
 }
 
 void driveDirectionSwitch() {
@@ -299,7 +295,7 @@ void driveDirectionSwitch() {
 
 // Speed Encoding
 void encoder() {
-  if (millis() - prevEncodedTime > 300 / (5 + currentSpeed)) {
+  if (millis() - prevEncodedTime > 200 / (5 + currentSpeed)) {
     estep++;
     prevEncodedTime = millis();
   }
@@ -328,7 +324,7 @@ void dcmControl(int percent) {
   linearm.set_PositionWithSpeed(LENEAR_DEVICE_ID, 1, 65473, linearSpeed * 10);
 
   percent = boxingInt(0, 100, percent);
-  accelConvertedValue255 = map(percent, 0, 100, 0, 150);
+  accelConvertedValue255 = map(percent, 0, 100, 0, 100); // max 150 out of 255
   analogWrite(dcm_output_pin, accelConvertedValue255);
 }
 
@@ -344,8 +340,7 @@ void linearControl(int percent) {
   else pressLength = 0;
   pressLength = pressLength * (65473) / 100;
 
-
-  linearm.set_PositionWithSpeed(LENEAR_DEVICE_ID, 0, pressLength , linearSpeed * 10);
+  linearm.set_PositionWithSpeed(LENEAR_DEVICE_ID, 0, pressLength, linearSpeed * 10);
 }
 
 
@@ -413,7 +408,7 @@ void showingDisplay() {
   if (isBrakePushed == 1) sendDisplay("BRAKE !", 11);
   else if (isBrakePushed == 0) sendDisplay("", 11);
   else sendDisplay("ERR", 11);
-  
+
   if (autoMode == 1) sendDisplay("AS-ON", 14);
   else if (autoMode == 2) sendDisplay("AS-EMER", 14);
   else if (autoMode == 3) sendDisplay("MANUAL", 14);
@@ -423,7 +418,6 @@ void showingDisplay() {
   else if (directionMode == 2) sendDisplay("N", 5);
   else if (directionMode == 3) sendDisplay("D", 5);
   else sendDisplay("ERR", 5);
-
 }
 
 // Util

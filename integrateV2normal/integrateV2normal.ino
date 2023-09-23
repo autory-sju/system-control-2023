@@ -7,10 +7,10 @@ const int accel_input_pin = 10; //A0
 
 // digital pin
 const int speed_input_pin = 20;
-const int dcm_output_pin = 44;
-const int forward_input_pin = 38;
+const int dcm_output_pin = 47;
+const int forward_input_pin = 36;
 const int forward_relay_output_pin = 50;
-const int auto_pin = 40;
+const int auto_pin = 53;
 
 // constant
 const int MAX_PEDAL_INPUT_1023 = 880;   // 최대 페달 입력값 (0-1023 범위) 설정
@@ -130,8 +130,8 @@ void autoAcceleration(int accelPressPercent){
 
   Serial.print(accelPressPercent);
   Serial.println("% accel AUTO");
-  accelConvertedValue255 += map(accelPressPercent, 0, 100, 0, 255);
-  analogWrite(dcm_output_pin, accelConvertedValue255);
+  accelConvertedValue255 += map(accelPressPercent, 0, 100, 0, 100);
+  analogWrite(dcm_output_pin, accelPressPercent);
 }
 
 void manualAcceleration(){
