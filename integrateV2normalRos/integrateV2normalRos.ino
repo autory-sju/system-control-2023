@@ -1,29 +1,28 @@
 #include <ros.h>
 #include <std_msgs/Int32.h>
+#include <std_msgs/Float64.h>
+#include <geometry_msgs/TwistWithCovarianceStamped.h>
 #include <std_msgs/String.h>
 #include "mas001.h"
 #include "blc200.h"
-#include <MsTimer2.h>
-#include <string.h>
 #include <SoftwareSerial.h>
 
 
 // analong pin
-const int accel_input_pin = 10;  //A0
+const int accel_input_pin = 15;  //A0
 
 // digital pin
 const int speed_input_pin = 20;
-const int dcm_output_pin = 47;
+const int dcm_output_pin = 44;
 const int forward_R_switch_pin = 37;
 const int forward_D_switch_pin = 36;
 const int forward_relay_output_pin = 50;
 const int auto_ON_pin = 53;
 const int auto_OFF_pin = 52;
-const int vos_switch_pin = 41;
-const int vos_output_pin = 40;
+const int ves_switch_pin = 41;
+const int ves_output_pin = 40;
 const int brake_switch_pin = 22;
 
-// const int foot_pin = 43;
 const int display_rx = 31;
 const int display_tx = 30;
 
@@ -38,41 +37,40 @@ const int LENEAR_LIMIT_LENGTH = 13;
 
 // variable
 char buf[30];
-// bool isForward = true;
 int directionMode = 0;
 bool isAuto = true;
 int autoMode = 0;
 int vesOn = 0;  // 0:off / 1:on
 int isBrakePushed = 0;
-int targetSpeed = 0;
+float targetSpeed = 0;
 float currentSpeed = 0;
 int speedDis = 0;
-int dcmOutputValue = 0;
 int linearSpeed = 30000;
 int accelValue1023 = 0;
 int accelConvertedValue255 = 0;
-unsigned long curTime = 0;
-unsigned long prevEncodedTime = 0;
-unsigned long periodTime = 0;
-int currentIRState = 0;
-int prevIRState = 0;
-float RPM = 0;
-int estep_read;
-int estep = 0;
+int autoBrakeValue100 = 0;
+int accelAutoPressPercent = 0;
+
 float err_P = 0, err_I = 0, err_D = 0, err_B = 0;
 float Pv = 0.02, Iv = 0.02;  // 반응 속도
 float Dv = 2;                // 급격한 변화 방지 (오버슈팅 방지)
 long pressLength = 0;
 
 // Ros
-void messageCb(const std_msgs::Int32& msg);
+void messageCb(const std_msgs::Float64& msg);
+void messageSpd(const std_msgs::Float64& msg);
 
 ros::NodeHandle nh;
-ros::Subscriber<std_msgs::Int32> sub("tractive_control", &messageCb);
+ros::Subscriber<std_msgs::Float64> sub("/tractive_control", &messageCb), subcurrentspeed("/메틀렙에서 보내줄 이름", &messageSpd);
 std_msgs::String str_msg;
 ros::Publisher pub("arduino_speed_out", &str_msg);
-void messageCb(const std_msgs::Int32& msg) {
+void messageCb(const std_msgs::Float64& msg) {
   targetSpeed = msg.data;
+}
+void messageSpd(const std_msgs::Float64& msg) {
+  currentSpeed = msg.data;
+  Serial.print("current speed");
+  Serial.println(currentSpeed);
 }
 
 BLC200 linearm(9600, 100);
@@ -83,15 +81,15 @@ void setup() {
 
 
   Serial.begin(115200);
-  nh.getHardware()->setBaud(115200);
+  //nh.getHardware()->setBaud(115200);
   nh.initNode();
   nh.subscribe(sub);
+  nh.subscribe(subcurrentspeed);
   nh.advertise(pub);
 
   pinMode(auto_ON_pin, INPUT_PULLUP);
   pinMode(auto_OFF_pin, INPUT_PULLUP);
-  pinMode(foot_pin, INPUT_PULLUP);
-  pinMode(vos_switch_pin, INPUT_PULLUP);
+  pinMode(ves_switch_pin, INPUT_PULLUP);
   pinMode(forward_R_switch_pin, INPUT_PULLUP);
   pinMode(forward_D_switch_pin, INPUT_PULLUP);
   pinMode(brake_switch_pin, INPUT_PULLUP);
@@ -99,15 +97,13 @@ void setup() {
 
   pinMode(dcm_output_pin, OUTPUT);
   pinMode(forward_relay_output_pin, OUTPUT);
-  pinMode(vos_output_pin, OUTPUT);
+  pinMode(ves_output_pin, OUTPUT);
 
 
   HMISerial.begin(9600);
   while (!Serial) {}  // 시리얼 포트가 연결될 대까지 기다림
   Serial.println("READY");
 
-
-  attachInterrupt(digitalPinToInterrupt(speed_input_pin), encoder, RISING);
 
   if (linearm.get_Feedback(LENEAR_DEVICE_ID, 0xA6)) {
     linearSpeed = (uint16_t)linearm.blcData[1] << 8 | (uint16_t)linearm.blcData[2];
@@ -123,24 +119,11 @@ void setup() {
     }
   }
 
-  // if (linearm.get_Feedback(LENEAR_DEVICE_ID, 0xA6)) {
-  //   linearSpeed = (uint16_t)linearm.blcData[1] << 8 | (uint16_t)linearm.blcData[2];
-  //   Serial.println(linearSpeed);
-  // } else {
-  //   Serial.println("Fail..");
-  //   sendDisplay("LIN CON ERR", 15);
-  //   while (1);
-  // }
-
   Serial.println("plz wait 3secs");
   linearm.set_ReductionRatio(LENEAR_DEVICE_ID, LINEAR_GEAR_RATIO);
   Serial.println("initialized");
-  // linearm.set_PositionWithSpeed(LENEAR_DEVICE_ID, 1, 65473, linearSpeed * 10);  // go initial position
   linearControl(0);
   delay(3000);
-
-  MsTimer2::set(200, renewCurrentSpeedInterrupt);
-  MsTimer2::start();
 }
 
 
@@ -148,107 +131,71 @@ void loop() {
   nh.spinOnce();
   autoModeSwitch();
   driveDirectionSwitch();
-  vosSwitch();
+  vesSwitch();
   brakeSwitch();
   showingDisplay();
 
   if (autoMode == 1) {  //  AS - ON
-    targetSpeed = (int)Serial.readStringUntil('\n').toInt();
+                        // current speed -> ROS velocity
+                        // target speed -> ROS
+    // targetSpeed = (int)Serial.readStringUntil('\n').toInt();
     sendDisplay(String(targetSpeed), 3);
     speedDis = targetSpeed - currentSpeed;
-    speedDis = boxingInt(-2, 20, speedDis);
+    speedDis = boxingInt(-5, 10, speedDis);
 
-    if (speedDis >= -2) {
-      autoAcceleration(map(speedDis, -2, 40, 20, 65));  //0%(=30)<= speedDis <= 100%(100) MAX65%
-    } else if (-5 > speedDis) {
+    if (speedDis >= -1) {
+      autoAcceleration();  //0%(=30)<= speedDis <= 100%(100) MAX65%
+    } else if (-2 > speedDis) {
       linearControl(50);  //0%(=25)<= speedDis <= 100%(50)
     }
-  } else if (autoMode = 2) {  // AS - EM
+  } else if (autoMode == 2) {  // AS - EM
     linearControl(100);
-  } else if (autoMode = 3) {  // AS - OFF
+  } else if (autoMode == 3) {  // AS - OFF
     manualAcceleration();
   }
 }
 
 
-// Tractive Control
-// void autoBrake(int brakePressPercent) {
-//   // dcm stop
-//   analogWrite(dcm_output_pin, 0);
-
-//   brakePressPercent = boxingInt(0, 100, brakePressPercent);
-
-//   if (brakePressPercent >= 80) brakePressPercent = 100;
-//   else if (brakePressPercent >= 40) brakePressPercent = 50;
-//   else if (brakePressPercent >= 10) brakePressPercent = 10;
-//   else brakePressPercent = 0;
-//   Serial.print(brakePressPercent);
-//   Serial.println("% brake");
-
-//   int convertedBrakeValue = map(brakePressPercent, 0, 100, 0, 20);
-//   int brakeInternalValue = convertedBrakeValue * (65473) / 100;
-
-//   accelConvertedValue255 = 0;
-//   linearm.set_PositionWithSpeed(LENEAR_DEVICE_ID, 0, brakeInternalValue, linearSpeed * 10);
-// }
-
-void autoAcceleration(int accelPressPercent) {
-  accelPressPercent = boxingInt(0, 100, accelPressPercent);
+void autoAcceleration() {
   err_P = speedDis;
   err_I += err_P;
   err_D = err_B - err_P;
   err_B = err_P;
-  accelPressPercent = ((err_P * Pv) + (err_I * Iv) + (err_D * Dv));
-  accelPressPercent = boxingInt(0, 100, accelPressPercent);
-  dcmControl(accelPressPercent);
-
-  Serial.print(accelPressPercent);
-  Serial.println("% accel AUTO");
+  accelAutoPressPercent = ((err_P * Pv) + (err_I * Iv) + (err_D * Dv));
+  accelAutoPressPercent = boxingInt(0, 100, accelAutoPressPercent);
+  dcmControl(accelAutoPressPercent);
 }
 
 void manualAcceleration() {
-  // brake realease
-  //linearm.set_PositionWithSpeed(LENEAR_DEVICE_ID, 1, 65473, linearSpeed * 10);  // go initial position
+  linearControl(0);
 
   accelValue1023 = analogRead(accel_input_pin);  // read analog accel input
-  dcmControl(map(accelValue1023, MIN_PEDAL_INPUT, MAX_PEDAL_INPUT_1023, 0, 100));
-  // accelConvertedValue255 = map(accelValue1023, MIN_PEDAL_INPUT, MAX_PEDAL_INPUT_1023, 0, 255);
-  // Serial.print(map(accelConvertedValue255, 0, 255, 0, 100));
-  // Serial.println("% accel MANUAL");
-  // analogWrite(dcm_output_pin, accelConvertedValue255);
+  if (directionMode != 2) {
+    dcmControl(map(accelValue1023, MIN_PEDAL_INPUT, MAX_PEDAL_INPUT_1023, 0, 100));
+  }
+
 }
 
 
 
 // MODE SETTING
-void vosSwitch() {
+void vesSwitch() {
   // int prevMode = isBrakePushed;
 
-  if (digitalRead(vos_switch_pin) == 1) {
+  if (digitalRead(ves_switch_pin) == 1) {
     isBrakePushed = 1;
-    digitalWrite(vos_output_pin, HIGH);
+    digitalWrite(ves_output_pin, HIGH);
   } else {
     isBrakePushed = 0;
-    digitalWrite(vos_output_pin, LOW);
+    digitalWrite(ves_output_pin, LOW);
   }
-  // if (prevMode != directionMode) {
-  //   if (vesOn == 1) sendDisplay("VES ON", 12);
-  //   else if (vesOn == 2) sendDisplay("VES OFF", 12);
-  // }
 }
-
 void brakeSwitch() {
-  // int prevMode = vesOn;
-
   if (digitalRead(brake_switch_pin) == 1) {
     isBrakePushed = 1;
   } else {
     isBrakePushed = 0;
   }
-  // if (prevMode != directionMode) {
-  //   if (isBrakePushed == 1) sendDisplay("BRAKE !", 11);
-  //   else if (isBrakePushed == 0) sendDisplay("", 11);
-  // }
 }
 void autoModeSwitch() {
   int prevMode = autoMode;
@@ -265,13 +212,8 @@ void autoModeSwitch() {
 
   if (prevMode != autoMode) {
     analogWrite(dcm_output_pin, 0);
-    // if (autoMode == 1) sendDisplay("AS-ON", 14);
-    // else if (autoMode == 2) sendDisplay("AS-EMER", 14);
-    // else if (autoMode == 3) sendDisplay("MANUAL", 14);
-    // else sendDisplay("ERR", 14);
   }
 }
-
 void driveDirectionSwitch() {
   int prevMode = directionMode;
 
@@ -286,48 +228,32 @@ void driveDirectionSwitch() {
   }
   if (prevMode != directionMode) {
     analogWrite(dcm_output_pin, 0);
-    // if (directionMode == 1) sendDisplay("R", 5);
-    // else if (directionMode == 2) sendDisplay("N", 5);
-    // else if (directionMode == 3) sendDisplay("D", 5);
   }
 }
-
-// Speed Encoding
-void encoder() {
-  if (millis() - prevEncodedTime > 200 / (5 + currentSpeed)) {
-    estep++;
-    prevEncodedTime = millis();
-  }
-}
-void renewCurrentSpeedInterrupt() {
-
-  estep_read = estep;
-  estep = 0;
-  // if(estep_read >= 6) estep_read = 6;
-  currentSpeed = PI * WHEEL_DIAMETER * 0.82 * estep_read;  // m/s for every 0.2sec
-  // Serial.print("CurrentSpeed/step: ");
-  // Serial.print(currentSpeed);
-  // Serial.print("km/h / ");
-  // Serial.println(estep_read);
-  dtostrf(currentSpeed, 4, 2, buf);
-  str_msg.data = buf;
-  pub.publish(&str_msg);
-  sendDisplay(String(currentSpeed), 2);
-}
-
-
 
 // MOTOR CONTROL IN 0~100%
 void dcmControl(int percent) {
+  percent = boxingInt(0, 100, percent);
   // brake realease
   linearm.set_PositionWithSpeed(LENEAR_DEVICE_ID, 1, 65473, linearSpeed * 10);
 
-  percent = boxingInt(0, 100, percent);
-  accelConvertedValue255 = map(percent, 0, 100, 0, 100); // max 150 out of 255
-  analogWrite(dcm_output_pin, accelConvertedValue255);
+  if (isBrakePushed) {
+    analogWrite(dcm_output_pin, 0);
+  } else {
+    percent = boxingInt(0, 100, percent);
+    accelConvertedValue255 = map(percent, 0, 100, 0, 255);  // max 150 out of 255
+    analogWrite(dcm_output_pin, accelConvertedValue255);
+  }
+
+  // 지워도됨
+  // percent = boxingInt(0, 100, percent);
+  // accelConvertedValue255 = map(percent, 0, 100, 0, 100);  // max 150 out of 255
+  // analogWrite(dcm_output_pin, accelConvertedValue255);
 }
 
+// LINEAR BRAKE CONTROL IN 0~100%
 void linearControl(int percent) {
+  autoBrakeValue100 = percent;
   // dcm stop
   analogWrite(dcm_output_pin, 0);
 
@@ -361,10 +287,10 @@ void sendDisplay(String sendData, int mode) {
       target = "t4.txt=\"";  // Manual / auto
       break;
     case 7:
-      target = "t7.txt=\"";  // foot
+      target = "t7.txt=\"";  // foot accel
       break;
     case 11:
-      target = "t11.txt=\"";  // brake
+      target = "t11.txt=\"";  // auto brake
       break;
     case 9:
       target = "t9.txt=\"";  // accel
@@ -397,8 +323,6 @@ void sendDisplay(String sendData, int mode) {
 }
 
 void showingDisplay() {
-  sendDisplay(String(millis()), 2);
-
 
   if (vesOn == 1) sendDisplay("VES ON", 12);
   else if (vesOn == 2) sendDisplay("VES OFF", 12);
@@ -417,6 +341,19 @@ void showingDisplay() {
   else if (directionMode == 2) sendDisplay("N", 5);
   else if (directionMode == 3) sendDisplay("D", 5);
   else sendDisplay("ERR", 5);
+
+  sendDisplay(String(currentSpeed), 2);
+  sendDisplay(String(targetSpeed), 3);
+
+  sendDisplay(String(accelConvertedValue255), 9);
+  sendDisplay(String(accelValue1023), 7);
+  sendDisplay(String(autoBrakeValue100), 11);
+
+  if (isBrakePushed) {
+    sendDisplay("!BR!", 13);
+  } else {
+    sendDisplay("", 13);
+  }
 }
 
 // Util

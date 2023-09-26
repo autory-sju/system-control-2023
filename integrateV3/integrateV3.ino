@@ -108,15 +108,6 @@ void setup() {
     }
   }
 
-  // if (linearm.get_Feedback(LENEAR_DEVICE_ID, 0xA6)) {
-  //   linearSpeed = (uint16_t)linearm.blcData[1] << 8 | (uint16_t)linearm.blcData[2];
-  //   Serial.println(linearSpeed);
-  // } else {
-  //   Serial.println("Fail..");
-  //   sendDisplay("LIN CON ERR", 15);
-  //   while (1);
-  // }
-
   Serial.println("plz wait 3secs");
   linearm.set_ReductionRatio(LENEAR_DEVICE_ID, LINEAR_GEAR_RATIO);
   Serial.println("initialized");
