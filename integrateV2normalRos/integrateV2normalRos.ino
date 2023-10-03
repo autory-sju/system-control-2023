@@ -12,7 +12,7 @@
 const int accel_input_pin = 15;  //A0
 
 // digital pin
-const int speed_input_pin = 20;
+//const int speed_input_pin = 20;
 const int dcm_output_pin = 44;
 const int forward_R_switch_pin = 37;
 const int forward_D_switch_pin = 36;
@@ -23,8 +23,11 @@ const int ves_switch_pin = 41;
 const int ves_output_pin = 40;
 const int brake_switch_pin = 22;
 
-const int display_rx = 31;
-const int display_tx = 30;
+const int display_rx_pin = 31;
+const int display_tx_pin = 30;
+
+const int steer_rx_pin = 33;
+const int steer_tx_pin = 32;
 
 
 // constant
@@ -42,6 +45,7 @@ bool isAuto = true;
 int autoMode = 0;
 int vesOn = 0;  // 0:off / 1:on
 int isBrakePushed = 0;
+float steerSpeed = 0;
 float targetSpeed = 0;
 float currentSpeed = 0;
 int speedDis = 0;
@@ -57,26 +61,32 @@ float Dv = 2;                // 급격한 변화 방지 (오버슈팅 방지)
 long pressLength = 0;
 
 // Ros
-void messageCb(const std_msgs::Float64& msg);
-void messageSpd(const std_msgs::Float64& msg);
+void messageTargetSpd(const std_msgs::Float64& msg);
+void messageCurrentSpd(const std_msgs::Float64& msg);
+void messageSteer(const std_msgs::Float64& msg);
 
 ros::NodeHandle nh;
-ros::Subscriber<std_msgs::Float64> sub("/tractive_control", &messageCb), subcurrentspeed("/메틀렙에서 보내줄 이름", &messageSpd);
+ros::Subscriber<std_msgs::Float64> sub("/tractive_control", &messageTargetSpd), subcurrentspeed("/메틀렙에서 보내줄 이름", &messageCurrentSpd);
 std_msgs::String str_msg;
 ros::Publisher pub("arduino_speed_out", &str_msg);
-void messageCb(const std_msgs::Float64& msg) {
+
+void messageTargetSpd(const std_msgs::Float64& msg) {
   targetSpeed = msg.data;
+  sendDisplay(String(targetSpeed), 3);
 }
-void messageSpd(const std_msgs::Float64& msg) {
+void messageCurrentSpd(const std_msgs::Float64& msg) {
   currentSpeed = msg.data;
-  Serial.print("current speed");
-  Serial.println(currentSpeed);
+  sendDisplay(String(targetSpeed), 2);
+}
+void messageSteer(const std_msgs::Float64& msg) {
+  // currentSpeed = msg.data;
+  sendDisplay("Steer: " + String(targetSpeed), 15);
 }
 
 BLC200 linearm(9600, 100);
 MAS001 myShield;
-SoftwareSerial HMISerial(display_rx, display_tx);  // RX, TX
-
+SoftwareSerial HMISerial(display_rx_pin, display_tx_pin);  // RX, TX
+SoftwareSerial STEERSerial(steer_rx_pin, steer_tx_pin);
 void setup() {
 
 
@@ -101,6 +111,7 @@ void setup() {
 
 
   HMISerial.begin(9600);
+  STEERSerial.begin(38400);
   while (!Serial) {}  // 시리얼 포트가 연결될 대까지 기다림
   Serial.println("READY");
 
@@ -138,11 +149,17 @@ void loop() {
   if (autoMode == 1) {  //  AS - ON
                         // current speed -> ROS velocity
                         // target speed -> ROS
+
+    
     // targetSpeed = (int)Serial.readStringUntil('\n').toInt();
     sendDisplay(String(targetSpeed), 3);
     speedDis = targetSpeed - currentSpeed;
     speedDis = boxingInt(-5, 10, speedDis);
+    
+    // 횡방향
+    STEERSerial.println(steerSpeed);
 
+    // 종방향
     if (speedDis >= -1) {
       autoAcceleration();  //0%(=30)<= speedDis <= 100%(100) MAX65%
     } else if (-2 > speedDis) {
@@ -173,7 +190,6 @@ void manualAcceleration() {
   if (directionMode != 2) {
     dcmControl(map(accelValue1023, MIN_PEDAL_INPUT, MAX_PEDAL_INPUT_1023, 0, 100));
   }
-
 }
 
 
