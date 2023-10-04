@@ -1,4 +1,3 @@
-#include <SoftwareSerial.h>
 
 const int steer_step_pin = 8;
 const int steer_dir_pin = 9;
@@ -15,15 +14,14 @@ float GEARBOX_RATIO = 1.5;       // 조향하우징 기어비
 long totalSteps = 0;             // Total steps moved
 bool isStepMotorStopped = true;  // Flag to track if the motor is currently stopped
 int prevState = 0; 
-
-SoftwareSerial SLAVESerial(5,6);// RX, TX
+float steer_velocity = 0;
 
 void setup() {
-  SLAVESerial.begin(38400);
   pinMode(steer_step_pin, OUTPUT);
   pinMode(steer_dir_pin, OUTPUT);
   pinMode(steer_en_pin, OUTPUT);
   pinMode(switch_pin, INPUT_PULLUP);
+  
   Serial.begin(38400);     // Set the baud rate to 38400
   Serial.setTimeout(100);  // Set a timeout for parsing input
 }
@@ -34,10 +32,7 @@ void loop() {
   }
 
   if (Serial.available() > 0 && digitalRead(switch_pin) == 1) {
-    String inputStr = Serial.readStringUntil('\n');  // Read the input until a newline character is encountered
-    inputStr = SLAVESerial.readStringUntil('\n');
-    inputStr.trim();                                 // Remove leading/trailing whitespace
-    float steer_velocity = inputStr.toFloat();       // 핸들 각속도 입력받음
+    steer_velocity = Serial.readStringUntil('\n').toFloat();  
 
     // Determine stepDirection based on the sign of the input
     if (steer_velocity < 0) {

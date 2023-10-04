@@ -6,10 +6,12 @@
 // #include <geometry_msgs/Twist.h>
 // #include <std_msgs/String.h>
 
+// #include "ArduinoJson.h"
 #include "mas001.h"
 #include "blc200.h"
 #include <SoftwareSerial.h>
 
+// DynamicJsonDocument<100> doc;
 
 // analong pin
 const int accel_input_pin = 15;  //A0
@@ -57,59 +59,21 @@ int accelValue1023 = 0;
 int accelConvertedValue255 = 0;
 int autoBrakeValue100 = 0;
 int accelAutoPressPercent = 0;
+String jsonString = "";
 
 float err_P = 0, err_I = 0, err_D = 0, err_B = 0;
 float Pv = 0.02, Iv = 0.02;  // 반응 속도
 float Dv = 2;                // 급격한 변화 방지 (오버슈팅 방지)
 long pressLength = 0;
 
-// // Ros
-// void messageTargetSpd(const geometry_msgs::Twist& msg);
-// geometry_msgs::Twist msgs;
-
-// ros::NodeHandle nh;
-// std_msgs::String str_msg;
-
-// ros::Publisher pub("arduino_speed_out", &str_msg);
-// /*void messageTargetSpd(const std_msgs::Float64& msg) {
-//   targetSpeed = msg.Linear.X;
-//   sendDisplay(String(targetSpeed), 3);
-//   currentSpeed = msg.Linear.Z;
-//   sendDisplay(String(targetSpeed), 2);
-//   steerSpeed = msg.Angular.Z;
-//   sendDisplay("Steer: " + String(steerSpeed), 15);
-// }*/
-
-// void messageTargetSpd(const geometry_msgs::Twist& msg) {
-//   sendDisplay("get msg",15);
-
-//   dcmControl(30);
-//   str_msg.data = "publisher initiallized";
-//   pub.publish( &str_msg );
-//   targetSpeed = (float)msg.linear.x;
-//   sendDisplay(String(targetSpeed), 3);
-//   currentSpeed = (float)msg.linear.z;
-//   sendDisplay(String(targetSpeed), 2);
-//   steerSpeed = (float)msg.angular.z;
-//   sendDisplay("Steer: " + String(steerSpeed), 15);
-//    sendDisplay("complete msg",15);
-// }
-// ros::Subscriber<geometry_msgs::Twist> sub("/cmd_vel", &messageTargetSpd);
-
 BLC200 linearm(9600, 100);
 MAS001 myShield;
 SoftwareSerial HMISerial(display_rx_pin, display_tx_pin);  // RX, TX
-SoftwareSerial STEERSerial(steer_rx_pin, steer_tx_pin);
 
 
 void setup() {
 
 
-  Serial.begin(115200);
-  nh.getHardware()->setBaud(115200);
-  nh.initNode();
-  nh.subscribe(sub);
-  nh.advertise(pub);
 
   pinMode(auto_ON_pin, INPUT_PULLUP);
   pinMode(auto_OFF_pin, INPUT_PULLUP);
@@ -124,8 +88,8 @@ void setup() {
   pinMode(ves_output_pin, OUTPUT);
 
 
+  Serial1.begin(115200);
   HMISerial.begin(9600);
-  STEERSerial.begin(38400);
   while (!Serial) {
      Serial.println("Serial out");
   }  // 시리얼 포트가 연결될 대까지 기다림
@@ -150,7 +114,7 @@ void setup() {
   Serial.println("plz wait 3secs");
   // str_msg.data = "publisher initiallized";
   // pub.publish( &str_msg );
-  linearm.set_ReductionRatio(LENEAR_DEVICE_ID, LINEAR_GEAR_RATIO);
+  linearm.set_ReductionRatio(LENEAR_DEVICE_ID, LINEAR_GEAR_RATIO);  
   Serial.println("initialized");
   linearControl(0);
   delay(3000);
@@ -158,30 +122,41 @@ void setup() {
 
 
 void loop() {
-  str_msg.data = "loop";
-  pub.publish( &str_msg );
   autoModeSwitch();
   driveDirectionSwitch();
   vesSwitch();
   brakeSwitch();
   showingDisplay();
+  
+  if(Serial1.available()){
+    jsonString = Serial1.readStringUntil('\n');
+    targetSpeed = jsonString.toFloat();
+    // jsonString = Serial1.readStringUntil('\n');
+    sendDisplay(jsonString, 15);
+    // deserializeJson(doc, jsonString);
+    
+    // targetSpeed = (float)doc["tar"];
+    // currentSpeed = (float)doc["cur"];
+
+    sendDisplay(String(currentSpeed), 2);
+    sendDisplay(String(targetSpeed), 3);
+    
+  }else sendDisplay("NO ROS", 15);
 
   if (autoMode == 1) {  //  AS - ON
                         // current speed -> ROS velocity
                         // target speed -> ROS
 
-    // targetSpeed = (int)Serial.readStringUntil('\n').toInt();
-    sendDisplay(String(targetSpeed), 3);
     speedDis = targetSpeed - currentSpeed;
-    speedDis = boxingInt(-5, 10, speedDis);
+    speedDis = boxingFloat(-5, 10, speedDis);
 
     err_P = speedDis;
     err_I += err_P;
     err_D = err_B - err_P;
     err_B = err_P;
     
-    // 횡방향
-    STEERSerial.println(steerSpeed);
+    // // 횡방향
+    // STEERSerial.println(steerSpeed);
 
     // 종방향
     if (speedDis >= 0) {
@@ -197,8 +172,6 @@ void loop() {
   else if (autoMode == 3) {  // AS - OFF
     manualAcceleration();
   }
-  nh.spinOnce();
-
 }
 
 
@@ -405,6 +378,11 @@ void showingDisplay() {
 
 // Util
 int boxingInt(int min, int max, int value) {
+  if (value <= min) return min;
+  else if (value >= max) return max;
+  else return value;
+}
+float boxingFloat(float min, float max, float value) {
   if (value <= min) return min;
   else if (value >= max) return max;
   else return value;
