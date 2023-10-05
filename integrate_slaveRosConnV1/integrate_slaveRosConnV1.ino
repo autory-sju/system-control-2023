@@ -50,25 +50,16 @@ void setup() {
 
 void loop() {
 
-  // 종방향 메인으로 보내줌
-  if(Serial1.available()){
-    // jsonString = "{\"cur\":\"" + String(currentSpeed) +"\",\"tar\":\"" + String(targetSpeed) + "\"}";
-    // doc["cur"] = String(currentSpeed);
-    // doc["tar"] = String(targetSpeed);
-    // serializeJson(doc, jsonString);
-    // doc.clear();
-    // Serial1.println(jsonString);
-    Serial1.println(String(targetSpeed));
-    delay(333);
+  Serial1.write((byte*)&targetSpeed,sizeof(float));
+  Serial1.write((byte*)&currentSpeed,sizeof(float));
 
-  }
 
   // 횡방향 슬래이브로 보내줌
-  if(Serial2.available()){
-    Serial2.println(String(steerSpeed));
-  }
+
+  Serial2.println(String(steerSpeed));
 
   nh.spinOnce();
+  delay(125);
 
 
 }

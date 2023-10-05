@@ -8,7 +8,7 @@
 
 #include "mas001.h"
 #include "blc200.h"
-#include <SoftwareSerial.h>
+// #include <SoftwareSerial.h>
 
 // analong pin
 const int accel_input_pin = 15;  //A0
@@ -25,11 +25,10 @@ const int ves_switch_pin = 41;
 const int ves_output_pin = 40;
 const int brake_switch_pin = 22;
 
-const int display_rx_pin = 31;
-const int display_tx_pin = 30;
-
-const int steer_rx_pin = 33;
-const int steer_tx_pin = 32;
+// const int display_rx_pin = 31;
+// const int display_tx_pin = 30;
+// const int steer_rx_pin = 33;
+// const int steer_tx_pin = 32;
 
 
 // constant
@@ -65,7 +64,7 @@ long pressLength = 0;
 
 BLC200 linearm(9600, 100);
 MAS001 myShield;
-SoftwareSerial HMISerial(display_rx_pin, display_tx_pin);  // RX, TX
+// SoftwareSerial HMISerial(display_rx_pin, display_tx_pin);  // RX, TX
 
 
 void setup() {
@@ -86,7 +85,7 @@ void setup() {
 
 
   Serial1.begin(115200);
-  HMISerial.begin(9600);
+  Serial2.begin(9600);
   while (!Serial) {
     Serial.println("Serial out");
   }  // 시리얼 포트가 연결될 대까지 기다림
@@ -127,7 +126,7 @@ void loop() {
   if (Serial1.available() >= 8) {
     Serial1.readBytes((char*)&targetSpeed, sizeof(float));
     Serial1.readBytes((char*)&currentSpeed, sizeof(float));
-    sendDisplay("Ros On", 15);
+    sendDisplay("Ros ON", 15);
 
 
     sendDisplay(String(currentSpeed), 2);
@@ -162,6 +161,8 @@ void loop() {
     manualAcceleration();
   }
 }
+
+
 
 
 void autoAcceleration() {
@@ -323,11 +324,11 @@ void sendDisplay(String sendData, int mode) {
   //Serial.print(mode);
   //Serial.println(sendData);
   for (int i = 0; i < target.length(); i++) {
-    HMISerial.write(target[i]);  // send each char
+    Serial2.write(target[i]);  // send each char
   }
-  HMISerial.write(0xff);
-  HMISerial.write(0xff);
-  HMISerial.write(0xff);  // end signal byte
+  Serial2.write(0xff);
+  Serial2.write(0xff);
+  Serial2.write(0xff);  // end signal byte
 }
 
 void showingDisplay() {
