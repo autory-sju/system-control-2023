@@ -1,5 +1,4 @@
 #include <ros.h>
-#include "ArduinoJson.h"
 
 #include <std_msgs/Int32.h>
 #include <std_msgs/Float64.h>
@@ -10,8 +9,11 @@
 float steerSpeed = 0;
 float targetSpeed = 0;
 float currentSpeed = 0;
-DynamicJsonDocument doc(100);
-String jsonString = "";
+float speedDis = 0;
+String speedDisString = "";
+String steerSpeedString = "";
+
+int i = 0;
 
 // Ros
 void messageTargetSpd(const geometry_msgs::Twist& msg);
@@ -36,30 +38,34 @@ ros::Subscriber<geometry_msgs::Twist> sub("/cmd_vel", &messageTargetSpd);
 void setup() {
 
 
-  Serial.begin(57600); // ros - rosArduino 
-  Serial1.begin(115200); // TX18 RX19 rosArduino - velocity 
-  Serial2.begin(38400); // TX16 RX17 rosArduino - steer
+  Serial.begin(57600);    // ros - rosArduino
+  Serial1.begin(115200);  // TX18 RX19 rosArduino - velocity
+  Serial2.begin(38400);   // TX16 RX17 rosArduino - steer
 
   nh.getHardware()->setBaud(57600);
   nh.initNode();
   nh.subscribe(sub);
   // nh.advertise(pub);
-
-  
 }
 
 void loop() {
 
-  Serial1.write((byte*)&targetSpeed,sizeof(float));
-  Serial1.write((byte*)&currentSpeed,sizeof(float));
+  // 종방향 마스터로 보내줌
+  speedDis = targetSpeed * 100 - currentSpeed * 100;
+
+  speedDisString = "s" + String(speedDis) + "f";
+  for (i = 0; i < speedDisString.length(); i++) {
+    Serial1.write(speedDisString[i]);
+  }
 
 
-  // 횡방향 슬래이브로 보내줌
+  // 횡방향 슬레이브로 전송
+  steerSpeedString = "s" + String((int)(steerSpeed*100)) + "f";
+  for (i = 0; i < steerSpeedString.length(); i++) {
+    Serial2.write(steerSpeedString[i]);
+  }
 
-  Serial2.println(String(steerSpeed));
 
   nh.spinOnce();
-  delay(125);
-
-
+  delay(200);
 }

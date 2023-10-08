@@ -29,48 +29,53 @@ void setup() {
   pinMode(switch_pin, INPUT_PULLUP);
 
   Serial.begin(38400);     // Set the baud rate to 38400
-  Serial.setTimeout(100);  // Set a timeout for parsing input
+  // Serial.setTimeout(100);  // Set a timeout for parsing input
 }
 
 void loop() {
-  // while (Serial.available() >= 4) {
-  //   serialChar = Serial.read();
-  //   if (serialChar == 's') {
-  //     serialStr = "";
-  //     isStrRead = true;
-  //   } else if (serialChar == 'f' && isStrRead) {
-  //     isStrRead = false;
-  //     steerVelocityInt = (int)serialStr.toInt();
-  //     if (abs(steerVelocityInt) >= 10) {
-  //       steer_velocity = ((float)steerVelocityInt);
-  //     } else {
-  //       steer_velocity = 0;
-  //     }
-  //     break;
-  //   } else {
-  //     if (isStrRead) serialStr += serialChar;
-  //   }
-  // }
+  Serial.println("Loop "+String(Serial.available()));
+  while (Serial.available() >= 4) {
+    serialChar = Serial.read();
+    if (serialChar == 's') {
+      serialStr = "";
+      isStrRead = true;
+    } else if (serialChar == 'f' && isStrRead) {
+      isStrRead = false;
+      steerVelocityInt = (int)serialStr.toInt();
+      Serial.println("spd "+String(steerVelocityInt));
+
+      if (abs(steerVelocityInt) >= 1) {
+        steer_velocity = ((float)steerVelocityInt);
+      } else {
+        steer_velocity = 0;
+      }
+      break;
+    } else {
+      if (isStrRead) serialStr += serialChar;
+    }
+  }
 
   if (prevState == 0 && digitalRead(switch_pin) == 1) {
     totalSteps = 0;
   }
 
-  if (Serial.available()>0 && digitalRead(switch_pin) == 1) {
+  // if (Serial.available()>0 && digitalRead(switch_pin) == 1) {
+  if (digitalRead(switch_pin) == 1) {
     // steer_velocity = steer_velocity / 100.0;
-    steer_velocity = Serial.readStringUntil('\n').toFloat();
+    // steer_velocity = Serial.readStringUntil('\n').toFloat();
 
     // Determine stepDirection based on the sign of the input
-    if (steer_velocity < 0) {
+    if (steerVelocityInt < 0) {
       stepDirection = -1;  // counterclockwise for negative input
-    } else if (steer_velocity > 0) {
+    } else if (steerVelocityInt > 0) {
       stepDirection = 1;  // clockwise for positive input
     } else {
       stepDirection = 0;  // Stop for input of 0
     }
 
     // 모터의 초당 이동할 스텝 수(steps/s) 를 계산 :steps per revolution, and microsteer_step_ping 이용
-    mtSpeed = abs(steer_velocity) * REDUCER_GEAR_RATIO * GEARBOX_RATIO * 200 * 4 / (2 * PI);
+    mtSpeed = abs(steerVelocityInt) * REDUCER_GEAR_RATIO * GEARBOX_RATIO * 2 * 4 / (2 * PI);
+    // mtSpeed = abs(steer_velocity) * REDUCER_GEAR_RATIO * GEARBOX_RATIO * 200 * 4 / (2 * PI);
 
     Serial.print("Input (steering Velocity): ");
     Serial.println(steer_velocity);  // Print the input value to the Serial Monitor
