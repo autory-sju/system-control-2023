@@ -1,16 +1,8 @@
-// #include <ArduinoHardware.h>
-// #include <ros.h>
-// #include <std_msgs/Int32.h>
-// #include <std_msgs/Float64.h>
-// //#include <geometry_msgs/TwistWithCovarianceStamped.h>
-// #include <geometry_msgs/Twist.h>
-// #include <std_msgs/String.h>
 #include "mas001.h"
 #include "blc200.h"
-//#include <SoftwareSerial.h>
 
 // analong pin
-const int accel_input_pin = 15;  //A0
+const int accel_input_pin = 15;
 
 // digital pin
 //const int speed_input_pin = 20;
@@ -30,14 +22,16 @@ const int display_tx_pin = 30;
 const int steer_rx_pin = 33;
 const int steer_tx_pin = 32;
 
+unsigned long lastSpdUpdTime = 0;
+
 
 // constant
-const int MAX_PEDAL_INPUT_1023 = 810;  // 최대 페달 입력값 (0-1023 범위) 설정
-const int MIN_PEDAL_INPUT = 180;       // 최소 페달 입력값 (0-1023 범위) 설정
+const int MAX_PEDAL_INPUT_1023 = 700;  // 최대 페달 입력값 (0-1023 범위) 설정
+const int MIN_PEDAL_INPUT = 200;       // 최소 페달 입력값 (0-1023 범위) 설정
 const float WHEEL_DIAMETER = 0.51;
 const int LINEAR_GEAR_RATIO = 250;  // max would be 192
 const int LENEAR_DEVICE_ID = 0;
-const int LENEAR_LIMIT_LENGTH = 15;
+const int LENEAR_LIMIT_LENGTH = 16;
 
 // variable
 int directionMode = 0;
@@ -56,6 +50,7 @@ int accelConvertedValue255 = 0;
 int autoBrakeValue100 = 0;
 int accelAutoPressPercent = 0;
 int accelManualPressPercent = 0;
+int i = 0;
 
 char serial1Char;
 String serial1Str = "";
@@ -69,8 +64,6 @@ long pressLength = 0;
 
 BLC200 linearm(9600, 100);
 MAS001 myShield;
-//SoftwareSerial HMISerial(display_rx_pin, display_tx_pin);  // RX, TX
-
 
 void setup() {
   pinMode(auto_ON_pin, INPUT_PULLUP);
@@ -113,7 +106,9 @@ void setup() {
   // pub.publish( &str_msg );
   linearm.set_ReductionRatio(LENEAR_DEVICE_ID, LINEAR_GEAR_RATIO);
   Serial.println("initialized");
-  linearControl(0);
+  // linearControl(0);
+  linearm.set_PositionWithSpeed(LENEAR_DEVICE_ID, 1, 65473, linearSpeed * 10);
+  
   delay(3000);
   Serial1.flush();
 }
@@ -197,13 +192,22 @@ void autoAcceleration() {
 }
 
 void manualAcceleration() {
-  linearControl(0);
+  linearm.set_PositionWithSpeed(LENEAR_DEVICE_ID, 1, 65473, linearSpeed * 10);
 
-  accelValue1023 = analogRead(accel_input_pin);  // read analog accel input
+  if (lastSpdUpdTime - millis() >= 100) {
+    accelValue1023 = analogRead(accel_input_pin);  // read analog accel input
+    lastSpdUpdTime = millis();
+  }
+
+
   if (directionMode != 2) {
-    accelManualPressPercent=map(accelValue1023, MIN_PEDAL_INPUT, MAX_PEDAL_INPUT_1023, 0, 100);
-    sendDisplay("MANU "+String(accelAutoPressPercent), 15);
+    accelManualPressPercent = map(accelValue1023, MIN_PEDAL_INPUT, MAX_PEDAL_INPUT_1023, 0, 100);
+    accelManualPressPercent = boxingInt(0, 100, accelManualPressPercent);
     dcmControl(accelManualPressPercent);
+
+    // for(i=0;i<=accelManualPressPercent;i++){
+    //   dcmControl(accelManualPressPercent);
+    // }
   }
 }
 
@@ -276,7 +280,7 @@ void dcmControl(int percent) {
     analogWrite(dcm_output_pin, 0);
   } else {
     percent = boxingInt(0, 100, percent);
-    accelConvertedValue255 = map(percent, 0, 100, 0, 255);  // max 150 out of 255
+    accelConvertedValue255 = map(percent, 0, 100, 0, 200);  // max 150 out of 255
     analogWrite(dcm_output_pin, accelConvertedValue255);
   }
 }
