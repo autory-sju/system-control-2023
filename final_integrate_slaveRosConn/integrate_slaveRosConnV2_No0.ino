@@ -12,8 +12,12 @@ float currentSpeed = 0;
 float speedDis = 0;
 String speedDisString = "";
 String steerSpeedString = "";
+unsigned long timeTmp = 0;
+
 
 int i = 0;
+
+unsigned long t = 0;
 
 // Ros
 void messageTargetSpd(const geometry_msgs::Twist& msg);
@@ -50,22 +54,37 @@ void setup() {
 
 void loop() {
 
+
   // 종방향 마스터로 보내줌
   speedDis = targetSpeed * 100 - currentSpeed * 100;
 
   speedDisString = "s" + String(speedDis) + "f";
-  for (i = 0; i < speedDisString.length(); i++) {
-    Serial1.write(speedDisString[i]);
+  if (millis() - timeTmp > 2000) {
+    for (i = 0; i < speedDisString.length(); i++) {
+      Serial1.write(speedDisString[i]);
+    }
+    timeTmp = millis();
   }
 
+
+
+
+  // if (millis() - t > 1000) {
 
   // 횡방향 슬레이브로 전송
-  steerSpeedString = "s" + String((int)(steerSpeed*100)) + "f";
-  for (i = 0; i < steerSpeedString.length(); i++) {
-    Serial2.write(steerSpeedString[i]);
+  if (steerSpeed != 0) {
+    steerSpeedString = "s" + String((int)(steerSpeed * 100)) + "f";
+    for (i = 0; i < steerSpeedString.length(); i++) {
+      Serial2.write(steerSpeedString[i]);
+    }
   }
+  steerSpeed = 0;
+  speedDis = 0;  // 무지성 작동 방지 코드
+  //뭔가 이상하면 0일 때 보내지 말거나 지우자
 
 
+  //   t = millis();
+  // }
   nh.spinOnce();
-  delay(200);
+  delay(50);
 }

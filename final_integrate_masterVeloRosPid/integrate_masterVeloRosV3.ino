@@ -16,11 +16,11 @@ const int ves_switch_pin = 41;
 const int ves_output_pin = 40;
 const int brake_switch_pin = 22;
 
-const int display_rx_pin = 31;
-const int display_tx_pin = 30;
+// const int display_rx_pin = 31;
+// const int display_tx_pin = 30;
 
-const int steer_rx_pin = 33;
-const int steer_tx_pin = 32;
+// const int steer_rx_pin = 33;
+// const int steer_tx_pin = 32;
 
 unsigned long lastSpdUpdTime = 0;
 
@@ -31,7 +31,7 @@ const int MIN_PEDAL_INPUT = 200;       // 최소 페달 입력값 (0-1023 범위
 const float WHEEL_DIAMETER = 0.51;
 const int LINEAR_GEAR_RATIO = 250;  // max would be 192
 const int LENEAR_DEVICE_ID = 0;
-const int LENEAR_LIMIT_LENGTH = 16;
+const float LENEAR_LIMIT_LENGTH = 14;
 
 // variable
 int directionMode = 0;
@@ -58,9 +58,10 @@ bool isStrRead = false;
 int speedDisInt = 0;
 
 float err_P = 0, err_I = 0, err_D = 0, err_B = 0;
-float Pv = 0.002, Iv = 0.002;  // 반응 속도
-float Dv = 2;                  // 급격한 변화 방지 (오버슈팅 방지)
-long pressLength = 0;
+float Pv = 0.008, Iv = 0.008;  // 반응 속도
+float Dv = 1;                  // 급격한 변화 방지 (오버슈팅 방지)
+long pressLengthFinal = 0;
+float pressLength = 0;
 
 BLC200 linearm(9600, 100);
 MAS001 myShield;
@@ -135,10 +136,6 @@ void loop() {
         speedDis = ((float)speedDisInt);
         sendDisplay(String(speedDis), 2);
         sendDisplay(String(speedDisInt), 3);
-        Serial.print("GOT:");
-        Serial.print(speedDis + 0.01);
-        Serial.print("  GOTINT:");
-        Serial.println(speedDisInt);
       } else {
         speedDis = 0;
       }
@@ -297,9 +294,9 @@ void linearControl(int percent) {
   else if (percent >= 40) pressLength = 8;
   else if (percent >= 10) pressLength = 5;
   else pressLength = 0;
-  pressLength = pressLength * (65473) / 100;
+  pressLengthFinal = pressLength * (65473) / 100;
 
-  linearm.set_PositionWithSpeed(LENEAR_DEVICE_ID, 0, pressLength, linearSpeed * 10);
+  linearm.set_PositionWithSpeed(LENEAR_DEVICE_ID, 0, pressLengthFinal, linearSpeed * 10);
 }
 
 
